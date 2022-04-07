@@ -5,7 +5,7 @@ Synchronize files and folders locally by glob patterns, watch option included.
 ## Install
 
 ```sh
-npm i -D copy-and-watch
+npm i -D @davidhs/copy-and-watch
 ```
 
 ## Usage
