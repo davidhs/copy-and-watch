@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/zont/copy-and-watch"
+    "url": "https://github.com/davidhs/copy-and-watch"
   },
   "keywords": [
     "rsync",
@@ -23,6 +23,9 @@
     "watch"
   ],
   "author": "Alexander Zonov",
+  "contributors": [
+    "Davíð Helgason <david@reiknir.it> (https://reiknir.it/)"
+  ],
   "license": "MIT",
   "dependencies": {
     "chokidar": "3.5.2",

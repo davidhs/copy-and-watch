@@ -3,105 +3,131 @@ const path = require('path');
 const chokidar = require('chokidar');
 const glob = require('glob');
 const globParent = require('glob-parent');
+
 require('colors');
 
-/* CODE */
-
-const args = process.argv.slice(2);
-const options = {};
-
-['watch', 'clean', 'skip-initial-copy'].forEach(key => {
-  const index = args.indexOf(`--${key}`);
-  if (index >= 0) {
-    options[key] = true;
-    args.splice(index, 1);
-  }
-});
-
-if (args.length < 2) {
-  console.error('Not enough arguments: copy-and-watch [options] <sources> <target>'.red);
-  process.exit(1);
-}
-
-if (options['skip-initial-copy'] && !options['watch']) {
-  console.error('--skip-initial-copy argument is meant to be used with --watch, otherwise no files will be copied'.red);
-  process.exit(1);
-}
-
-const target = args.pop();
-const sources = args;
-const parents = [...new Set(sources.map(globParent))];
-
-const findTarget = from => {
+/**
+ * 
+ * @param {string} from 
+ * @returns 
+ */
+function findTarget(from) {
   const parent = parents
-    .filter(p => from.indexOf(p) >= 0)
+    .filter(parent => from.indexOf(parent) >= 0)
     .sort()
     .reverse()[0];
-  return path.join(target, path.relative(parent, from));
-};
-const createDirIfNotExist = to => {
-  'use strict';
+  return path.join(destination, path.relative(parent, from));
+}
 
+/**
+ * 
+ * @param {string} to 
+ */
+function createDirIfNotExist(to) {
   const dirs = [];
   let dir = path.dirname(to);
 
   while (dir !== path.dirname(dir)) {
-    dirs.unshift(dir);
+    dirs.push(dir);
     dir = path.dirname(dir);
   }
+  
+  dirs.reverse();
 
   dirs.forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir);
     }
   });
-};
-const copy = from => {
-  const to = findTarget(from);
+}
+
+/**
+ * 
+ * @param {string} from 
+ */
+function copy(from) {
+  const pathFrom = path.normalize(from);
+  const to = findTarget(pathFrom);
   createDirIfNotExist(to);
-  const stats = fs.statSync(from);
+
+  const stats = fs.statSync(pathFrom);
+
   if (stats.isDirectory()) {
-    return;
+    fs.readdirSync(pathFrom).map(fileName => path.join(pathFrom, fileName))
+      .forEach(copy); // recursively copy directory contents
+  } else {
+    fs.writeFileSync(to, fs.readFileSync(pathFrom));
+    console.log('[COPY]'.yellow, pathFrom, 'to'.yellow, to);
   }
-  fs.writeFileSync(to, fs.readFileSync(from));
-  console.log('[COPY]'.yellow, from, 'to'.yellow, to);
-};
-const remove = from => {
+}
+
+/**
+ * 
+ * @param {string} from 
+ */
+function remove(from) {
   const to = findTarget(from);
   fs.unlinkSync(to);
-  console.log('[DELETE]'.yellow, to);
-};
-const rimraf = dir => {
+  console.log('[DELETE]'.red, to);
+}
+
+/**
+ * Remove directory at path `dir`.
+ * 
+ * @param {string} dir Path to directory to remove.
+ */
+function rimraf(dir) {
   if (fs.existsSync(dir)) {
     fs.readdirSync(dir).forEach(entry => {
       const entryPath = path.join(dir, entry);
       if (fs.lstatSync(entryPath).isDirectory()) {
         rimraf(entryPath);
       } else {
+        console.log('[CLEAN]'.magenta, entryPath);
         fs.unlinkSync(entryPath);
       }
     });
     fs.rmdirSync(dir);
   }
-};
+}
 
-// clean
-if (options.clean) {
-  rimraf(target);
+
+let watch = false;
+let clean = false;
+const sourceGlobs = [];
+
+for (const arg of process.argv.slice(2)) {
+  if (arg === '--watch') {
+    watch = true;
+  } else if (arg === '--clean') {
+    clean = true;
+  } else {
+    sourceGlobs.push(path.normalize(arg));
+  }
+}
+
+if (sourceGlobs.length < 2) {
+  console.error('Not enough arguments: copy-and-watch [options] <sources> <target>'.red);
+  process.exit(1);
+}
+
+const destination = sourceGlobs.pop(); // pick last path as destination
+const parents = [...new Set(sourceGlobs.map(globParent).map(path.normalize))];
+
+if (clean) {
+  console.log('Cleaning...');
+  rimraf(destination);
 }
 
 // initial copy
-if (!options['skip-initial-copy']) {
-  sources.forEach(s => glob.sync(s).forEach(copy));
-}
+sourceGlobs.forEach(s => glob.sync(s).forEach(copy));
 
 // watch
-if (options.watch) {
-  chokidar
-    .watch(sources, {
-      ignoreInitial: true
-    })
-    .on('ready', () => sources.forEach(s => console.log('[WATCH]'.yellow, s)))
+if (watch) {
+  chokidar.watch(sourceGlobs, {
+    ignoreInitial: true
+  })
+    .on('ready', () => sourceGlobs.forEach(s => console.log('[WATCHING]'.cyan, s)))
     .on('add', copy)
     .on('addDir', copy)
     .on('change', copy)
